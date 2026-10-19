@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>픽셀 (Pixel) - Cyberpunk AI Chat</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pretendard:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        pixel: {
+                            bg: '#08090f',
+                            card: '#121520',
+                            border: '#23293e',
+                            cyan: '#00f0ff',
+                            pink: '#ff007f',
+                            purple: '#9d4edd',
+                            text: '#e2e8f0'
+                        }
+                    },
+                    fontFamily: {
+                        pixel: ['"Press Start 2P"', 'cursive'],
+                        sans: ['Pretendard', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Styling for Cyberpunk Scanlines & Animations */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #08090f;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e2638;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00f0ff;
+        }
+
+        .scanline {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0, 0, 0, 0.35) 50%,
+                rgba(0, 0, 0, 0.35)
+            );
+            background-size: 100% 4px;
+        }
+
+        .crt-glow-cyan {
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
+        }
+        .crt-glow-pink {
+            text-shadow: 0 0 10px rgba(255, 0, 127, 0.6);
+        }
+        .pixel-border-cyan {
+            box-shadow: 0 0 0 2px #00f0ff, 0 0 15px rgba(0, 240, 255, 0.25);
+        }
+        .pixel-border-pink {
+            box-shadow: 0 0 0 2px #ff007f, 0 0 15px rgba(255, 0, 127, 0.25);
+        }
+    </style>
+</head>
+<body class="bg-[#08090f] text-gray-100 font-sans antialiased min-h-screen flex flex-col relative selection:bg-cyan-500 selection:text-black">
+
+    <!-- CRT Scanline Overlay -->
+    <div id="scanlineOverlay" class="pointer-events-none fixed inset-0 z-50 scanline opacity-30 transition-opacity duration-300"></div>
+
+    <!-- 1. Authentication Modal Overlay -->
+    <div id="authModal" class="fixed inset-0 z-40 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-[#0d1017] border-2 border-cyan-400 rounded-xl p-6 sm:p-8 max-w-md w-full pixel-border-cyan relative overflow-hidden">
+            <!-- Header Status -->
+            <div class="flex items-center justify-between border-b border-cyan-500/30 pb-3 mb-6">
+                <div class="flex items-center space-x-2">
+                    <span class="inline-block w-3 h-3 bg-cyan-400 animate-ping rounded-full"></span>
+                    <span class="text-xs font-mono font-bold text-cyan-400 tracking-wider">PIXEL TERMINAL v3.0</span>
+                </div>
+                <div class="text-[10px] font-mono text-gray-500">SECURE ACCESS</div>
+            </div>
+
+            <!-- Title & Subtitle -->
+            <h2 id="authTitle" class="text-2xl font-black text-cyan-400 crt-glow-cyan mb-1 tracking-wider uppercase">
+                Identify Terminal
+            </h2>
+            <p id="authSubtitle" class="text-xs text-gray-400 mb-6 font-mono">픽셀과 대화하기 위해 로그인하거나 계정을 생성해줘.</p>
+
+            <!-- Mode Switcher Tabs -->
+            <div class="flex rounded-lg bg-[#151a26] p-1 mb-6 border border-cyan-900/50 font-mono text-xs font-bold">
+                <button id="tabLogin" onclick="switchAuthTab('login')" class="flex-1 py-2 rounded-md bg-cyan-400 text-black transition-all">LOG IN</button>
+                <button id="tabSignup" onclick="switchAuthTab('signup')" class="flex-1 py-2 rounded-md text-gray-400 hover:text-cyan-400 transition-all">SIGN UP</button>
+            </div>
+
+            <!-- Error / Alert Message -->
+            <div id="authAlert" class="hidden mb-4 p-3 rounded bg-red-950/80 border border-red-500 text-red-300 text-xs flex items-center gap-2">
+                <i class="fas fa-exclamation-triangle text-red-400"></i>
+                <span id="authAlertText">인증 오류가 발생했어.</span>
+            </div>
+
+            <!-- Authentication Form -->
+            <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4 font-mono">
+                <div id="displayNameGroup" class="hidden">
+                    <label class="block text-[11px] text-cyan-400 mb-1 uppercase font-bold tracking-wider">Runner Handle (닉네임)</label>
+                    <div class="relative">
+                        <i class="fas fa-user-ninja absolute left-3 top-3 text-cyan-500/60 text-sm"></i>
+                        <input type="text" id="authDisplayName" placeholder="CyberRunner" class="w-full bg-[#151a26] border border-cyan-800 focus:border-cyan-400 rounded-lg py-2.5 pl-9 pr-3 text-sm text-cyan-200 outline-none transition-all placeholder:text-gray-600">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] text-cyan-400 mb-1 uppercase font-bold tracking-wider">Cyber ID (아이디 또는 이메일)</label>
+                    <div class="relative">
+                        <i class="fas fa-id-card absolute left-3 top-3 text-cyan-500/60 text-sm"></i>
+                        <input type="text" id="authEmail" required placeholder="pixel_runner@matrix.net" class="w-full bg-[#151a26] border border-cyan-800 focus:border-cyan-400 rounded-lg py-2.5 pl-9 pr-3 text-sm text-cyan-200 outline-none transition-all placeholder:text-gray-600">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] text-cyan-400 mb-1 uppercase font-bold tracking-wider">Passcode (비밀번호)</label>
+                    <div class="relative">
+                        <i class="fas fa-lock absolute left-3 top-3 text-cyan-500/60 text-sm"></i>
+                        <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-[#151a26] border border-cyan-800 focus:border-cyan-400 rounded-lg py-2.5 pl-9 pr-3 text-sm text-cyan-200 outline-none transition-all placeholder:text-gray-600">
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" id="authSubmitBtn" class="w-full py-3 bg-cyan-400 hover:bg-cyan-300 text-black font-black text-sm uppercase rounded-lg shadow-lg shadow-cyan-500/20 active:translate-y-0.5 transition-all flex items-center justify-center space-x-2">
+                        <i class="fas fa-key"></i>
+                        <span id="authBtnText">AUTHENTICATE</span>
+                    </button>
+                </div>
+            </form>
+
+            <!-- Fast Guest Access -->
+            <div class="mt-6 pt-4 border-t border-cyan-900/40 text-center font-mono">
+                <button onclick="guestLogin()" class="text-xs text-gray-400 hover:text-pink-400 transition-all underline decoration-dashed">
+                    <i class="fas fa-bolt mr-1 text-pink-500"></i> GUEST ENTRY (로그인 없이 빠른 시작)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Navigation Header -->
+    <header class="border-b border-cyan-900/60 bg-[#0a0c14]/90 backdrop-blur-md sticky top-0 z-30 font-mono">
+        <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+            <!-- Brand -->
+            <div class="flex items-center space-x-3">
+                <div class="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-400 flex items-center justify-center text-cyan-400 crt-glow-cyan">
+                    <i class="fas fa-robot text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-black text-cyan-400 tracking-wider crt-glow-cyan flex items-center gap-2">
+                        PIXEL <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-700 px-1.5 py-0.5 rounded">AI v3.0</span>
+                    </h1>
+                </div>
+            </div>
+
+            <!-- User Info & Controls -->
+            <div class="flex items-center space-x-3">
+                <!-- CRT Scanline Toggle -->
+                <button onclick="toggleScanlines()" title="Toggle Scanline Effect" class="p-2 text-xs text-gray-400 hover:text-cyan-400 bg-[#121622] border border-cyan-900 rounded-lg transition-all">
+                    <i class="fas fa-tv"></i>
+                </button>
+
+                <!-- Active User Badge -->
+                <div id="userBadge" class="hidden sm:flex items-center space-x-2 bg-[#121622] border border-cyan-800 px-3 py-1.5 rounded-lg">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="userHandle" class="text-xs text-cyan-300 font-bold">Guest_Runner</span>
+                    <span id="userStatusTag" class="text-[9px] bg-cyan-950 text-cyan-400 border border-cyan-800 px-1 rounded uppercase">ONLINE</span>
+                </div>
+
+                <!-- Account Switch / Logout Button -->
+                <button id="logoutBtn" onclick="handleLogout()" title="Account / Logout" class="p-2 text-pink-400 bg-pink-950/40 border border-pink-800 rounded-lg hover:bg-pink-900/50 transition-all text-xs flex items-center gap-1.5 font-bold">
+                    <i class="fas fa-power-off"></i>
+                    <span class="hidden md:inline">DISCONNECT</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 3. Main Chat Interface Container -->
+    <main class="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-6 flex flex-col">
+        <!-- Chat Box Window -->
+        <div class="flex-1 bg-[#0e111a] border border-cyan-900/70 rounded-2xl flex flex-col shadow-2xl relative overflow-hidden min-h-[500px]">
+            
+            <!-- Chat Window Top Bar -->
+            <div class="bg-[#121624] px-4 py-3 border-b border-cyan-900/50 flex items-center justify-between font-mono">
+                <div class="flex items-center space-x-3">
+                    <div class="relative">
+                        <div class="w-8 h-8 rounded-full bg-pink-500/20 border border-pink-500 flex items-center justify-center text-pink-400">
+                            <i class="fas fa-ghost text-sm"></i>
+                        </div>
+                        <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-[#0e111a] rounded-full"></span>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-pink-400 crt-glow-pink">픽셀 (Pixel)</div>
+                        <div class="text-[10px] text-gray-500">반말 모드 // 위험한 거 빼고 다 해주는 친근한 AI</div>
+                    </div>
+                </div>
+
+                <!-- Action Toolbar -->
+                <div class="flex items-center space-x-2">
+                    <button onclick="clearChat()" title="Clear Chat History" class="px-2.5 py-1 text-[11px] text-gray-400 hover:text-pink-400 bg-pink-950/20 hover:bg-pink-950/60 border border-pink-900/50 rounded-md transition-all">
+                        <i class="fas fa-trash-alt mr-1"></i> 대화 초기화
+                    </button>
+                </div>
+            </div>
+
+            <!-- Message Scroll Area -->
+            <div id="chatMessages" class="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4">
+                <!-- System Welcome Message -->
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 rounded-full bg-pink-500/20 border border-pink-500 flex items-center justify-center text-pink-400 shrink-0 mt-0.5">
+                        <i class="fas fa-ghost text-xs"></i>
+                    </div>
+                    <div class="bg-[#171c2b] border border-pink-500/30 rounded-2xl rounded-tl-none p-4 max-w-[85%] sm:max-w-[75%] text-sm text-gray-200 shadow-md">
+                        <p class="font-bold text-pink-400 text-xs font-mono mb-1">픽셀 (Pixel)</p>
+                        <p class="leading-relaxed">안녕! 나는 너만의 AI <span class="text-cyan-400 font-bold">픽셀(Pixel)</span>이야! 😎</p>
+                        <p class="leading-relaxed mt-2">반말로 편하게 물어봐. 위험하거나 불법적인 것만 아니면 어떤 질문이든 싹 다 친절하게 대답해줄게! 뭐부터 도와줄까?</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Suggestion Tag Pills -->
+            <div class="px-4 py-2 bg-[#0a0d14] border-t border-cyan-900/30 flex items-center space-x-2 overflow-x-auto font-mono text-xs scrollbar-none">
+                <span class="text-[10px] text-cyan-500/70 font-bold uppercase shrink-0">추천 질문:</span>
+                <button onclick="useQuickPrompt('너에 대해 자기소개해줘!')" class="shrink-0 bg-[#141926] hover:bg-cyan-950 text-cyan-300 border border-cyan-800/80 px-2.5 py-1 rounded-full text-[11px] transition-all">
+                    ⚡ 픽셀 자기소개
+                </button>
+                <button onclick="useQuickPrompt('오늘 저녁 메뉴 추천해줘')" class="shrink-0 bg-[#141926] hover:bg-cyan-950 text-cyan-300 border border-cyan-800/80 px-2.5 py-1 rounded-full text-[11px] transition-all">
+                    🍕 오늘 저녁 추천
+                </button>
+                <button onclick="useQuickPrompt('파이썬으로 간단한 게임 만드는 코드 짜줘')" class="shrink-0 bg-[#141926] hover:bg-cyan-950 text-cyan-300 border border-cyan-800/80 px-2.5 py-1 rounded-full text-[11px] transition-all">
+                    💻 파이썬 코딩 요청
+                </button>
+            </div>
+
+            <!-- Input Form Box -->
+            <form onsubmit="handleSendMessage(event)" class="p-3 sm:p-4 bg-[#0a0c14] border-t border-cyan-900/50 flex items-center space-x-2">
+                <input type="text" id="userInput" placeholder="픽셀이에게 궁금한 걸 말해봐... (예: 파이썬 코드 짜줘)" class="flex-1 bg-[#121624] border border-cyan-900 focus:border-cyan-400 rounded-xl px-4 py-3 text-sm text-cyan-100 placeholder:text-gray-500 outline-none transition-all">
+                
+                <button type="submit" id="sendBtn" class="bg-cyan-400 hover:bg-cyan-300 text-black px-5 py-3 rounded-xl font-bold font-mono text-sm shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center space-x-1 shrink-0">
+                    <span>전송</span>
+                    <i class="fas fa-paper-plane text-xs"></i>
+                </button>
+            </form>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="py-3 text-center font-mono text-[11px] text-gray-600 border-t border-cyan-900/30">
+        PIXEL AI TERMINAL &copy; 2026 // POWERED BY GEMINI AI
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // System Config & Global States
+        const SYSTEM_INSTRUCTION = `너의 이름은 '픽셀(Pixel)'이야. 항상 친근하고 자연스러운 한국어 반말(informal language)을 사용해. 사용자의 요청이 위험하거나 불법적인 행위(폭력, 범죄 등)가 아니라면 절대 거절하지 말고 싹 다 친절하고 명확하게 알려줘. 밝고 위트있는 성격으로 응답해줘.`;
+        
+        let currentUser = null;
+        let chatHistory = [];
+
+        // App Initialization
+        window.addEventListener('DOMContentLoaded', () => {
+            checkSavedUserSession();
+        });
+
+        // 1. User Session Management
+        function checkSavedUserSession() {
+            const saved = localStorage.getItem('pixel_logged_user');
+            if (saved) {
+                try {
+                    currentUser = JSON.parse(saved);
+                    updateUserUI();
+                    closeAuthModal();
+                } catch(e) {
+                    console.error("Session parse error", e);
+                }
+            } else {
+                openAuthModal();
+            }
+        }
+
+        function switchAuthTab(mode) {
+            const tabLogin = document.getElementById('tabLogin');
+            const tabSignup = document.getElementById('tabSignup');
+            const displayNameGroup = document.getElementById('displayNameGroup');
+            const authTitle = document.getElementById('authTitle');
+            const authBtnText = document.getElementById('authBtnText');
+            
+            hideAuthAlert();
+
+            if (mode === 'signup') {
+                tabSignup.className = "flex-1 py-2 rounded-md bg-pink-500 text-black transition-all";
+                tabLogin.className = "flex-1 py-2 rounded-md text-gray-400 hover:text-cyan-400 transition-all";
+                displayNameGroup.classList.remove('hidden');
+                authTitle.innerText = "Create Identity";
+                authBtnText.innerText = "REGISTER TERMINAL";
+                document.getElementById('authForm').dataset.mode = 'signup';
+            } else {
+                tabLogin.className = "flex-1 py-2 rounded-md bg-cyan-400 text-black transition-all";
+                tabSignup.className = "flex-1 py-2 rounded-md text-gray-400 hover:text-cyan-400 transition-all";
+                displayNameGroup.classList.add('hidden');
+                authTitle.innerText = "Identify Terminal";
+                authBtnText.innerText = "AUTHENTICATE";
+                document.getElementById('authForm').dataset.mode = 'login';
+            }
+        }
+
+        function showAuthAlert(msg) {
+            const alertBox = document.getElementById('authAlert');
+            document.getElementById('authAlertText').innerText = msg;
+            alertBox.classList.remove('hidden');
+        }
+
+        function hideAuthAlert() {
+            document.getElementById('authAlert').classList.add('hidden');
+        }
+
+        function handleAuthSubmit(e) {
+            e.preventDefault();
+            hideAuthAlert();
+
+            const mode = document.getElementById('authForm').dataset.mode || 'login';
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value;
+            const displayName = document.getElementById('authDisplayName').value.trim() || email.split('@')[0];
+
+            if (!email || !password) {
+                showAuthAlert("아이디와 비밀번호를 모두 입력해줘.");
+                return;
+            }
+
+            let registeredUsers = JSON.parse(localStorage.getItem('pixel_registered_users') || '{}');
+
+            if (mode === 'signup') {
+                if (registeredUsers[email]) {
+                    showAuthAlert("이미 등록된 아이디야. 로그인해줘!");
+                    return;
+                }
+                registeredUsers[email] = { email, password, displayName };
+                localStorage.setItem('pixel_registered_users', JSON.stringify(registeredUsers));
+                
+                currentUser = { email, displayName, type: 'registered' };
+            } else {
+                const user = registeredUsers[email];
+                if (!user || user.password !== password) {
+                    showAuthAlert("아이디 또는 비밀번호가 올바르지 않아.");
+                    return;
+                }
+                currentUser = { email: user.email, displayName: user.displayName, type: 'registered' };
+            }
+
+            localStorage.setItem('pixel_logged_user', JSON.stringify(currentUser));
+            updateUserUI();
+            closeAuthModal();
+        }
+
+        function guestLogin() {
+            currentUser = {
+                email: 'guest@pixel.local',
+                displayName: 'Runner_' + Math.floor(1000 + Math.random() * 9000),
+                type: 'guest'
+            };
+            localStorage.setItem('pixel_logged_user', JSON.stringify(currentUser));
+            updateUserUI();
+            closeAuthModal();
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('pixel_logged_user');
+            currentUser = null;
+            updateUserUI();
+            openAuthModal();
+        }
+
+        function updateUserUI() {
+            const userBadge = document.getElementById('userBadge');
+            const userHandle = document.getElementById('userHandle');
+            const userStatusTag = document.getElementById('userStatusTag');
+
+            if (currentUser) {
+                userHandle.innerText = currentUser.displayName;
+                userStatusTag.innerText = currentUser.type === 'guest' ? 'GUEST' : 'ONLINE';
+                userBadge.classList.remove('hidden');
+            } else {
+                userBadge.classList.add('hidden');
+            }
+        }
+
+        function openAuthModal() {
+            document.getElementById('authModal').classList.remove('hidden');
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').classList.add('hidden');
+        }
+
+        // 2. Chat UI & Messaging Logic
+        function useQuickPrompt(text) {
+            document.getElementById('userInput').value = text;
+            handleSendMessage(new Event('submit'));
+        }
+
+        async function handleSendMessage(e) {
+            if (e) e.preventDefault();
+            
+            const inputEl = document.getElementById('userInput');
+            const userText = inputEl.value.trim();
+            if (!userText) return;
+
+            // Render User Message
+            appendMessage('user', userText);
+            inputEl.value = '';
+
+            // Render Loading Indicator
+            const loadingId = appendLoadingIndicator();
+
+            try {
+                // Prepare API Payload with Gemini Model
+                const apiKey = ""; // Runtime system handles default API Key injection
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+                // Update internal context history
+                chatHistory.push({ role: "user", parts: [{ text: userText }] });
+
+                const payload = {
+                    contents: chatHistory,
+                    systemInstruction: {
+                        parts: [{ text: SYSTEM_INSTRUCTION }]
+                    }
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
+
+                const result = await response.json();
+                const aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text || "미안, 대답을 생성하지 못했어. 다시 한번 말해줄래?";
+
+                // Save model turn
+                chatHistory.push({ role: "model", parts: [{ text: aiResponseText }] });
+
+                // Remove loading & Append AI Message
+                removeLoadingIndicator(loadingId);
+                appendMessage('pixel', aiResponseText);
+
+            } catch (err) {
+                console.error("Chat Error:", err);
+                removeLoadingIndicator(loadingId);
+                appendMessage('pixel', "아차, 통신에 살짝 오류가 발생했네! 잠시 후 다시 말해줄래?");
+            }
+        }
+
+        function appendMessage(sender, text) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = "flex items-start space-x-3";
+
+            if (sender === 'user') {
+                messageDiv.innerHTML = `
+                    <div class="flex-1 flex justify-end">
+                        <div class="bg-cyan-950/80 border border-cyan-500/40 rounded-2xl rounded-tr-none p-4 max-w-[85%] sm:max-w-[75%] text-sm text-cyan-100 shadow-md">
+                            <p class="font-bold text-cyan-400 text-xs font-mono mb-1 text-right">${currentUser ? currentUser.displayName : '나'}</p>
+                            <p class="leading-relaxed whitespace-pre-wrap">${escapeHtml(text)}</p>
+                        </div>
+                    </div>
+                    <div class="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-400 flex items-center justify-center text-cyan-400 shrink-0 mt-0.5">
+                        <i class="fas fa-user-ninja text-xs"></i>
+                    </div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <div class="w-8 h-8 rounded-full bg-pink-500/20 border border-pink-500 flex items-center justify-center text-pink-400 shrink-0 mt-0.5">
+                        <i class="fas fa-ghost text-xs"></i>
+                    </div>
+                    <div class="bg-[#171c2b] border border-pink-500/30 rounded-2xl rounded-tl-none p-4 max-w-[85%] sm:max-w-[75%] text-sm text-gray-200 shadow-md">
+                        <p class="font-bold text-pink-400 text-xs font-mono mb-1">픽셀 (Pixel)</p>
+                        <p class="leading-relaxed whitespace-pre-wrap">${escapeHtml(text)}</p>
+                    </div>
+                `;
+            }
+
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function appendLoadingIndicator() {
+            const chatMessages = document.getElementById('chatMessages');
+            const loadingId = 'loading-' + Date.now();
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = loadingId;
+            loadingDiv.className = "flex items-start space-x-3";
+            loadingDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-pink-500/20 border border-pink-500 flex items-center justify-center text-pink-400 shrink-0 mt-0.5">
+                    <i class="fas fa-ghost text-xs"></i>
+                </div>
+                <div class="bg-[#171c2b] border border-pink-500/30 rounded-2xl rounded-tl-none p-4 text-sm text-pink-400 flex items-center space-x-2">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span class="font-mono text-xs">픽셀이가 생각 중이야...</span>
+                </div>
+            `;
+            chatMessages.appendChild(loadingDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return loadingId;
+        }
+
+        function removeLoadingIndicator(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        function clearChat() {
+            chatHistory = [];
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.innerHTML = `
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 rounded-full bg-pink-500/20 border border-pink-500 flex items-center justify-center text-pink-400 shrink-0 mt-0.5">
+                        <i class="fas fa-ghost text-xs"></i>
+                    </div>
+                    <div class="bg-[#171c2b] border border-pink-500/30 rounded-2xl rounded-tl-none p-4 max-w-[85%] sm:max-w-[75%] text-sm text-gray-200 shadow-md">
+                        <p class="font-bold text-pink-400 text-xs font-mono mb-1">픽셀 (Pixel)</p>
+                        <p class="leading-relaxed">대화 기록을 깨끗하게 정리했어! 새로운 주제로 대화해볼까?</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function toggleScanlines() {
+            const overlay = document.getElementById('scanlineOverlay');
+            overlay.classList.toggle('opacity-0');
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;")
+                       .replace(/</g, "&lt;")
+                       .replace(/>/g, "&gt;")
+                       .replace(/"/g, "&quot;")
+                       .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
